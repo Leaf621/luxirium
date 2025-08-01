@@ -8,6 +8,7 @@ import org.bytedeco.ffmpeg.global.avutil;
 import org.bytedeco.javacpp.PointerPointer;
 import ru.laefye.luxorium.player.exceptions.MediaLoadException;
 import ru.laefye.luxorium.player.interfaces.MediaDescription;
+import ru.laefye.luxorium.player.types.AudioFrame;
 import ru.laefye.luxorium.player.types.VideoFrame;
 
 import java.util.Optional;
@@ -75,5 +76,22 @@ public class Media implements MediaDescription, AutoCloseable {
             throw new IllegalStateException("No video stream found in media file.");
         }
         return new VideoStreamPlayer(this, videoStreamIndex.get(), onFrame);
+    }
+
+    public AudioStreamPlayer createAudioStreamPlayer(Consumer<AudioFrame> onFrame) {
+        var audioStreamIndex = getAudioStreamIndex();
+        if (audioStreamIndex.isEmpty()) {
+            throw new IllegalStateException("No audio stream found in media file.");
+        }
+        return new AudioStreamPlayer(this, audioStreamIndex.get(), onFrame);
+    }
+
+    public int getSampleRate() {
+        var audioStreamIndex = getAudioStreamIndex();
+        if (audioStreamIndex.isEmpty()) {
+            throw new IllegalStateException("No audio stream found in media file.");
+        }
+        var stream = context.streams(audioStreamIndex.get());
+        return stream.codecpar().sample_rate();
     }
 }

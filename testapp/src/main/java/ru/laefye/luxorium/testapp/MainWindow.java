@@ -3,6 +3,7 @@ package ru.laefye.luxorium.testapp;
 import ru.laefye.luxorium.player.Media;
 import ru.laefye.luxorium.player.MediaPlayer;
 
+import javax.sound.sampled.*;
 import javax.swing.*;
 import java.awt.*;
 import java.awt.image.BufferedImage;
@@ -20,6 +21,27 @@ public class MainWindow extends JFrame implements AutoCloseable {
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLocationRelativeTo(null);
         this.media = media;
+
+        var format = new AudioFormat(
+                AudioFormat.Encoding.PCM_SIGNED,
+                (float) media.getSampleRate(),
+                16,
+                1,
+                1 * 2,
+                (float) media.getSampleRate(),
+                false
+        );
+        var info = new DataLine.Info(SourceDataLine.class, format);
+        SourceDataLine line;
+        try {
+            line = (SourceDataLine) AudioSystem.getLine(info);
+            line.open(format);
+            line.start();
+        } catch (LineUnavailableException e) {
+            throw new RuntimeException(e);
+        }
+
+
         this.mediaPlayer = new MediaPlayer(media, List.of(
                 media.createVideoStreamPlayer(videoFrame -> {
                     if (image == null || image.getWidth() != videoFrame.lineSize / 3 || image.getHeight() != videoFrame.height) {
@@ -36,6 +58,9 @@ public class MainWindow extends JFrame implements AutoCloseable {
                     System.out.println(rgbArray.length);
                     image.setRGB(0, 0, videoFrame.lineSize / 3, videoFrame.height, rgbArray, 0, videoFrame.lineSize / 3);
                     repaint();
+                }),
+                media.createAudioStreamPlayer(audioFrame -> {
+                    line.write(audioFrame.data, 0, audioFrame.sampleSize * audioFrame.numberSamples);
                 })
         ));
     }

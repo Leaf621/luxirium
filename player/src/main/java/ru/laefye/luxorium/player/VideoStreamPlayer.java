@@ -108,7 +108,6 @@ public class VideoStreamPlayer extends StreamPlayer {
     @Override
     public void waitForEnd() {
         try {
-            System.out.println("Waiting for video stream player to finish...");
             if (playThread != null) {
                 queue.offer(videoFrameMaybe -> {
                     videoFrameMaybe.isPresent = false;
