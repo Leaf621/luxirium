@@ -1,0 +1,14 @@
+plugins {
+    id 'java'
+}
+
+group = 'ru.laefye.luxorium'
+version = 'unspecified'
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation 'org.bytedeco:ffmpeg-platform:7.1.1-1.5.12'
+}

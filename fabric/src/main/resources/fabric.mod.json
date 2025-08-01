@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "id": "luxorium",
+  "version": "${version}",
+  "name": "Luxorium",
+  "description": "",
+  "authors": [],
+  "contact": {},
+  "license": "All-Rights-Reserved",
+  "icon": "assets/luxorium/icon.png",
+  "environment": "client",
+  "entrypoints": {
+    "client": [
+      "ru.laefye.luxorium.mod.client.LuxoriumClient"
+    ],
+    "main": [
+      "ru.laefye.luxorium.mod.Luxorium"
+    ]
+  },
+  "mixins": [
+    "luxorium.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": ">=${loader_version}",
+    "fabric": "*",
+    "minecraft": "${minecraft_version}"
+  }
+}
