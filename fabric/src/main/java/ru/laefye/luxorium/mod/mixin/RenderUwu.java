@@ -40,8 +40,11 @@ public abstract class RenderUwu {
 
         BlockState state = signBlockEntity.getCachedState();
 
-        // Используем кастомную текстуру для экрана (можно менять динамически)
-        VertexConsumer vertexConsumer = vertexConsumerProvider.getBuffer(LuxoriumClient.createScreenLayer(LuxoriumClient.getInstance().getScreenTexture()));
+        // Получаем текстуру экрана
+        var screen = LuxoriumClient.getInstance().getCinemaScreen();
+        var renderLayer = screen.getTextureHolder().getRenderLayer().orElse(RenderLayer.getEntityCutout(Identifier.of("minecraft", "missing")));
+
+        VertexConsumer vertexConsumer = vertexConsumerProvider.getBuffer(renderLayer);
 
         // Пример координат quada (1x1, в центре)
         float x1 = -0.5f, y1 = -0.5f;

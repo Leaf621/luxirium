@@ -21,9 +21,12 @@ import net.minecraft.client.sound.Source;
 import net.minecraft.client.texture.NativeImage;
 import net.minecraft.client.texture.ReloadableTexture;
 import net.minecraft.client.texture.TextureContents;
+import net.minecraft.client.texture.TextureManager;
 import net.minecraft.command.CommandSource;
 import net.minecraft.resource.ResourceManager;
 import net.minecraft.util.Identifier;
+import ru.laefye.luxorium.mod.client.screen.CinemaScreen;
+import ru.laefye.luxorium.mod.client.screen.ScreenTexture;
 import ru.laefye.luxorium.mod.client.sound.SoundEmitter;
 import ru.laefye.luxorium.player.Media;
 import ru.laefye.luxorium.player.MediaPlayer;
@@ -48,20 +51,20 @@ public class LuxoriumClient implements ClientModInitializer {
                 MediaPlayer mediaPlayer = new MediaPlayer(media, List.of(
                         media.createVideoStreamPlayer(videoFrame -> {
                             MinecraftClient.getInstance().execute(() -> {
-                                screenTexture.setFrame(videoFrame);
+                                getCinemaScreen().getTextureHolder().setFrame(videoFrame);
                             });
-                        }),
-                        media.createAudioStreamPlayer(t -> {
-                            while (source.isQueueFull()) {
-                                try {
-                                    System.out.println("Ожидание освобождения буферов...");
-                                    Thread.sleep((long) (t.duration * 1000)); // Ждем 8 мс для освобождения буферов
-                                } catch (InterruptedException e) {
-                                    e.printStackTrace();
-                                } 
-                            }
-                            source.write(t.data, t.numberSamples * t.sampleSize, media.getSampleRate());
                         })
+                        // media.createAudioStreamPlayer(t -> {
+                        //     while (source.isQueueFull()) {
+                        //         try {
+                        //             System.out.println("Ожидание освобождения буферов...");
+                        //             Thread.sleep((long) (t.duration * 1000)); // Ждем 8 мс для освобождения буферов
+                        //         } catch (InterruptedException e) {
+                        //             e.printStackTrace();
+                        //         } 
+                        //     }
+                        //     source.write(t.data, t.numberSamples * t.sampleSize, media.getSampleRate());
+                        // })
                 ));
                 mediaPlayer.play();
                 mediaPlayer.close();
@@ -90,14 +93,13 @@ public class LuxoriumClient implements ClientModInitializer {
         });
     }
 
-    private ScreenTexture screenTexture;
+    private CinemaScreen screen;
 
-    public Identifier getScreenTexture() {
-        if (screenTexture == null) {
-            screenTexture = new ScreenTexture();
-            MinecraftClient.getInstance().getTextureManager().registerTexture(id("uwu"), screenTexture);
+    public CinemaScreen getCinemaScreen() {
+        if (screen == null) {
+            screen = new CinemaScreen(id("uwu"));
         }
-        return id("uwu");
+        return screen;
     }
 
     public static Identifier id(String path) {

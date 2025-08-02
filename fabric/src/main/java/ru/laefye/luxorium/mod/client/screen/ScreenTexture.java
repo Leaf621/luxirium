@@ -1,4 +1,4 @@
-package ru.laefye.luxorium.mod.client;
+package ru.laefye.luxorium.mod.client.screen;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -14,11 +14,12 @@ import ru.laefye.luxorium.player.types.VideoFrame;
 
 public class ScreenTexture extends AbstractTexture {
     
-    private static final int TEXTURE_WIDTH = 576;
-    private static final int TEXTURE_HEIGHT = 576;
-    private static final int CHECKERBOARD_SIZE = 2; // Размер клетки шахматной доски
+    private final int width;
+    private final int height;
 
-    public ScreenTexture() {
+    public ScreenTexture(int width, int height) {
+        this.width = width;
+        this.height = height;
         createTexture();
     }
 
@@ -57,8 +58,8 @@ public class ScreenTexture extends AbstractTexture {
         }
         
         // Вычисляем размеры для записи в текстуру (масштабируем или обрезаем)
-        int writeWidth = Math.min(frame.width, TEXTURE_WIDTH);
-        int writeHeight = Math.min(frame.height, TEXTURE_HEIGHT);
+        int writeWidth = Math.min(frame.width, width);
+        int writeHeight = Math.min(frame.height, height);
         
         // Подготавливаем буфер для записи в текстуру
         int neededSize = writeWidth * writeHeight * 4; // 4 байта на пиксель (RGBA)
@@ -152,8 +153,7 @@ public class ScreenTexture extends AbstractTexture {
             // Создаем текстуру с правильными параметрами
             // Параметры: name, usage, format, width, height, depth, mipLevels
             // usage = 5 включает USAGE_COPY_DST (1) и USAGE_TEXTURE_BINDING (4)
-            glTexture = gpuDevice.createTexture("video_screen", 5, TextureFormat.RGBA8,
-                                              TEXTURE_WIDTH, TEXTURE_HEIGHT, 1, 1);
+            glTexture = gpuDevice.createTexture("video_screen", 5, TextureFormat.RGBA8, width, height, 1, 1);
             
             if (glTexture == null) {
                 throw new RuntimeException("Не удалось создать текстуру");
@@ -166,119 +166,22 @@ public class ScreenTexture extends AbstractTexture {
             
             setFilter(false, false);
             setClamp(false);
-            
-            System.out.println("Текстура создана успешно: " + TEXTURE_WIDTH + "x" + TEXTURE_HEIGHT);
-            
-            // Инициализируем текстуру шахматным паттерном (опционально)
-            // initializeWithCheckerboard();
-            
+
+            System.out.println("Текстура создана успешно: " + width + "x" + height);
+
         } catch (Exception e) {
             System.err.println("Критическая ошибка при создании текстуры: " + e.getMessage());
             e.printStackTrace();
             throw new RuntimeException("Не удалось создать текстуру для видео", e);
         }
     }
-    
-    /**
-     * Инициализирует текстуру шахматным паттерном (для отладки)
-     */
-    private void initializeWithCheckerboard() {
-        try {
-            System.out.println("Инициализация текстуры шахматным паттерном...");
-            
-            // Создаем шахматную сетку
-            IntBuffer checkerboardData = createCheckerboardPattern();
-            
-            // Проверяем, что буфер создан корректно
-            if (checkerboardData != null && checkerboardData.hasRemaining()) {
-                // Записываем начальные данные в текстуру
-                RenderSystem.getDevice().createCommandEncoder()
-                    .writeToTexture(glTexture, checkerboardData, NativeImage.Format.RGBA,
-                              0, // mipLevel - уровень мипмапа (0 = базовый уровень)
-                              0, // layer - слой текстуры (0 для обычной 2D текстуры)
-                              0, // x - начальная позиция по X
-                              0, // y - начальная позиция по Y
-                              TEXTURE_WIDTH,  // width - ширина записываемой области
-                              TEXTURE_HEIGHT); // height - высота записываемой области
 
-                System.out.println("Шахматный паттерн успешно записан в текстуру!");
-                
-            } else {
-                System.err.println("Ошибка: буфер данных пуст или null!");
-            }
-        } catch (Exception e) {
-            System.err.println("Ошибка при инициализации текстуры: " + e.getMessage());
-            e.printStackTrace();
-        }
-    }
-    
-    /**
-     * Создает паттерн шахматной доски в виде IntBuffer
-     * @return IntBuffer с данными шахматной доски
-     */
-    private IntBuffer createCheckerboardPattern() {
-        // Создаем буфер с нативным порядком байтов
-        ByteBuffer byteBuffer = ByteBuffer.allocateDirect(TEXTURE_WIDTH * TEXTURE_HEIGHT * 4); // 4 байта на пиксель (RGBA)
-        byteBuffer.order(ByteOrder.nativeOrder());
-        IntBuffer buffer = byteBuffer.asIntBuffer();
-        
-        // Цвета для шахматной доски в формате ABGR (обратный порядок для little-endian)
-        int whiteColor = 0xFFFFFFFF; // Белый (A=FF, B=FF, G=FF, R=FF)
-        int blackColor = 0xFF000000; // Черный (A=FF, B=00, G=00, R=00)
-        
-        for (int y = 0; y < TEXTURE_HEIGHT; y++) {
-            for (int x = 0; x < TEXTURE_WIDTH; x++) {
-                // Определяем, какого цвета должна быть клетка
-                int checkX = x / CHECKERBOARD_SIZE;
-                int checkY = y / CHECKERBOARD_SIZE;
-                
-                // Если сумма координат четная - белая клетка, иначе - черная
-                boolean isWhite = (checkX + checkY) % 2 == 0;
-                
-                buffer.put(isWhite ? whiteColor : blackColor);
-            }
-        }
-        
-        buffer.flip(); // Подготавливаем буфер для чтения
-        
-        // Проверяем размер буфера
-        System.out.println("Создан буфер размером: " + buffer.remaining() + 
-                         " элементов (" + (buffer.remaining() * 4) + " байт)");
-        System.out.println("Ожидается: " + (TEXTURE_WIDTH * TEXTURE_HEIGHT) + " элементов");
-        
-        return buffer;
-    }
-    
-    /**
-     * Освобождает ресурсы текстуры
-     */
-    public void cleanup() {
-        try {
-            if (glTexture != null) {
-                // Освобождение ресурсов GPU текстуры
-                // Minecraft/WebGPU должен сам управлять памятью, но мы можем обнулить ссылки
-                System.out.println("Освобождение ресурсов текстуры...");
-            }
-            
-            // Очищаем буфер данных
-            bytes = null;
-            
-            System.out.println("Ресурсы текстуры освобождены");
-        } catch (Exception e) {
-            System.err.println("Ошибка при освобождении ресурсов текстуры: " + e.getMessage());
-            e.printStackTrace();
-        }
-    }
-    
-    /**
-     * Получает текущие размеры текстуры
-     */
     public int getTextureWidth() {
-        return TEXTURE_WIDTH;
+        return width;
     }
     
     public int getTextureHeight() {
-        return TEXTURE_HEIGHT;
+        return height;
     }
     
 }
