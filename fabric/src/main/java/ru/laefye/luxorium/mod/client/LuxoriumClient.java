@@ -43,7 +43,7 @@ public class LuxoriumClient implements ClientModInitializer {
         source.setVolume(1f); // 50% громкости
         new Thread(() -> {
             Logger.getLogger("LuxoriumClient").info("Media playback starting");
-            try (Media media = new Media("../../.test.mp4")) {
+            try (Media media = new Media("../../.test.webm")) {
                 // Получаем sample rate один раз и сохраняем
                 final int sampleRate = media.getSampleRate();
                 Logger.getLogger("LuxoriumClient").info("Sample rate: " + sampleRate);
