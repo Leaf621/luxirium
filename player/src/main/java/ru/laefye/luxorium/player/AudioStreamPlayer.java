@@ -34,11 +34,16 @@ public class AudioStreamPlayer extends StreamPlayer {
             var numberSamples = resampledFrame.nb_samples();
             var sampleSize = avutil.av_get_bytes_per_sample(resampler.getTargetSampleFormat());
             var timestamp = frame.pts() * avutil.av_q2d(stream().time_base());
+            var frameRate = resampledFrame.sample_rate();
+            var duration = frame.duration() * avutil.av_q2d(stream().time_base());
+
             queue.offer(audioFrameMaybe -> {
                 audioFrameMaybe.isPresent = true;
                 audioFrameMaybe.value.numberSamples = numberSamples;
                 audioFrameMaybe.value.sampleSize = sampleSize;
                 audioFrameMaybe.value.timestamp = timestamp;
+                audioFrameMaybe.value.sampleRate = frameRate;
+                audioFrameMaybe.value.duration = duration;
                 if (audioFrameMaybe.value.data.length < numberSamples * sampleSize) {
                     audioFrameMaybe.value.data = new byte[numberSamples * sampleSize];
                 }
@@ -60,8 +65,8 @@ public class AudioStreamPlayer extends StreamPlayer {
                     gettingFrames.set(true);
                     mediaHelper.getNextFrames();
                 }
-                var videoFrame = frame.value;
-                onFrame.accept(videoFrame);
+                var audioFrame = frame.value;
+                onFrame.accept(audioFrame);
             }
         } catch (InterruptedException e) {
             throw new RuntimeException(e);

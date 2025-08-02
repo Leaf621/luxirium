@@ -61,10 +61,10 @@ public abstract class RenderUwu {
         var model = matrices.peek();
 
         // Добавляем 4 вершины для экрана с полным освещением
-        vertexConsumer.vertex(model, x1, y1, z).color(r, g, b, a).texture(0.0f, 0.0f).overlay(overlay).light(fullbrightLight).normal(entry, 0.0f, 0.0f, 1.0f);
-        vertexConsumer.vertex(model, x2, y1, z).color(r, g, b, a).texture(1.0f, 0.0f).overlay(overlay).light(fullbrightLight).normal(entry, 0.0f, 0.0f, 1.0f);
-        vertexConsumer.vertex(model, x2, y2, z).color(r, g, b, a).texture(1.0f, 1.0f).overlay(overlay).light(fullbrightLight).normal(entry, 0.0f, 0.0f, 1.0f);
-        vertexConsumer.vertex(model, x1, y2, z).color(r, g, b, a).texture(0.0f, 1.0f).overlay(overlay).light(fullbrightLight).normal(entry, 0.0f, 0.0f, 1.0f);
+        vertexConsumer.vertex(model, x1, y1, z).color(r, g, b, a).texture(0.0f, 1.0f).overlay(overlay).light(fullbrightLight).normal(entry, 0.0f, 0.0f, 1.0f);
+        vertexConsumer.vertex(model, x2, y1, z).color(r, g, b, a).texture(1.0f, 1.0f).overlay(overlay).light(fullbrightLight).normal(entry, 0.0f, 0.0f, 1.0f);
+        vertexConsumer.vertex(model, x2, y2, z).color(r, g, b, a).texture(1.0f, 0.0f).overlay(overlay).light(fullbrightLight).normal(entry, 0.0f, 0.0f, 1.0f);
+        vertexConsumer.vertex(model, x1, y2, z).color(r, g, b, a).texture(0.0f, 0.0f).overlay(overlay).light(fullbrightLight).normal(entry, 0.0f, 0.0f, 1.0f);
 
         matrices.pop();
         ci.cancel();
