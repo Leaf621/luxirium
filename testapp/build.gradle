@@ -12,3 +12,25 @@ repositories {
 dependencies {
     implementation project(':player')
 }
+
+// Альтернативный способ создания fat jar без Shadow plugin
+task fatJar(type: Jar) {
+    archiveClassifier.set('fat')
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    
+    from {
+        configurations.runtimeClasspath.collect { 
+            it.isDirectory() ? it : zipTree(it).matching {
+                exclude 'META-INF/*.SF'
+                exclude 'META-INF/*.DSA' 
+                exclude 'META-INF/*.RSA'
+                exclude 'META-INF/MANIFEST.MF'
+            }
+        }
+    }
+    
+    with jar
+}
+
+// Делаем fatJar зависимой от обычной сборки
+build.dependsOn fatJar
