@@ -8,7 +8,7 @@ import java.util.List;
 
 public class Main {
     public static void main(String[] args) {
-        MainWindow mainWindow = new MainWindow(new Media(".test.mp4"));
+        MainWindow mainWindow = new MainWindow(new Media(".test.webm"));
         mainWindow.setVisible(true);
         mainWindow.start();
     }

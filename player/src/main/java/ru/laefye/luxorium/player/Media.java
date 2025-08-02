@@ -10,6 +10,7 @@ import ru.laefye.luxorium.player.exceptions.MediaLoadException;
 import ru.laefye.luxorium.player.interfaces.MediaDescription;
 import ru.laefye.luxorium.player.types.AudioFrame;
 import ru.laefye.luxorium.player.types.VideoFrame;
+import ru.laefye.luxorium.player.utils.RescalerOptions;
 
 import java.util.Optional;
 import java.util.function.Consumer;
@@ -70,12 +71,12 @@ public class Media implements MediaDescription, AutoCloseable {
         return Optional.of(streamIndex);
     }
 
-    public VideoStreamPlayer createVideoStreamPlayer(Consumer<VideoFrame> onFrame) {
+    public VideoStreamPlayer createVideoStreamPlayer(Consumer<VideoFrame> onFrame, RescalerOptions options) {
         var videoStreamIndex = getVideoStreamIndex();
         if (videoStreamIndex.isEmpty()) {
             throw new IllegalStateException("No video stream found in media file.");
         }
-        return new VideoStreamPlayer(this, videoStreamIndex.get(), onFrame);
+        return new VideoStreamPlayer(this, videoStreamIndex.get(), onFrame, options);
     }
 
     public AudioStreamPlayer createAudioStreamPlayer(Consumer<AudioFrame> onFrame) {

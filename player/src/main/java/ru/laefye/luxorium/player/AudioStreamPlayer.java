@@ -29,7 +29,6 @@ public class AudioStreamPlayer extends StreamPlayer {
     void processFrame(AVFrame frame) {
         gettingFrames.set(true);
         var resampledFrame = resampler.resample(frame);
-
         try {
             var numberSamples = resampledFrame.nb_samples();
             var sampleSize = avutil.av_get_bytes_per_sample(resampler.getTargetSampleFormat());

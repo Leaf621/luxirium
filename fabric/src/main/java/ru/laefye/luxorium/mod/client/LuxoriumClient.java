@@ -1,35 +1,22 @@
 package ru.laefye.luxorium.mod.client;
 
-import java.io.IOException;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.logging.Logger;
 
-import javax.sound.sampled.AudioFormat;
-
 import com.mojang.brigadier.Command;
-import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.context.CommandContext;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandManager;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
 import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource;
-import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.render.RenderLayer;
-import net.minecraft.client.render.RenderPhase;
-import net.minecraft.client.render.VertexFormats;
-import net.minecraft.client.sound.Source;
-import net.minecraft.client.texture.NativeImage;
-import net.minecraft.client.texture.ReloadableTexture;
-import net.minecraft.client.texture.TextureContents;
-import net.minecraft.client.texture.TextureManager;
-import net.minecraft.command.CommandSource;
-import net.minecraft.resource.ResourceManager;
 import net.minecraft.util.Identifier;
 import ru.laefye.luxorium.mod.client.screen.CinemaScreen;
-import ru.laefye.luxorium.mod.client.screen.ScreenTexture;
 import ru.laefye.luxorium.mod.client.sound.SoundEmitter;
 import ru.laefye.luxorium.player.Media;
 import ru.laefye.luxorium.player.MediaPlayer;
+import ru.laefye.luxorium.player.utils.RescalerOptions;
 
 public class LuxoriumClient implements ClientModInitializer {
     private static LuxoriumClient INSTANCE;
@@ -47,24 +34,21 @@ public class LuxoriumClient implements ClientModInitializer {
                 // Получаем sample rate один раз и сохраняем
                 final int sampleRate = media.getSampleRate();
                 Logger.getLogger("LuxoriumClient").info("Sample rate: " + sampleRate);
-                
+                AtomicLong d = new AtomicLong(System.currentTimeMillis());
                 MediaPlayer mediaPlayer = new MediaPlayer(media, List.of(
                         media.createVideoStreamPlayer(videoFrame -> {
-                            MinecraftClient.getInstance().execute(() -> {
-                                getCinemaScreen().getTextureHolder().setFrame(videoFrame);
-                            });
-                        })
-                        // media.createAudioStreamPlayer(t -> {
-                        //     while (source.isQueueFull()) {
-                        //         try {
-                        //             System.out.println("Ожидание освобождения буферов...");
-                        //             Thread.sleep((long) (t.duration * 1000)); // Ждем 8 мс для освобождения буферов
-                        //         } catch (InterruptedException e) {
-                        //             e.printStackTrace();
-                        //         } 
-                        //     }
-                        //     source.write(t.data, t.numberSamples * t.sampleSize, media.getSampleRate());
-                        // })
+                            getCinemaScreen().getTextureHolder().setFrame(videoFrame);
+                        }, RescalerOptions.create().withWidth(1280).withHeight(720)),
+                         media.createAudioStreamPlayer(t -> {
+                             while (source.isQueueFull()) {
+                                    try {
+                                        Thread.sleep((long)(t.duration * 1000));
+                                    } catch (InterruptedException e) {
+                                        e.printStackTrace();
+                                    }
+                             }
+                             source.write(t.data, t.sampleSize * t.numberSamples, t.sampleRate);
+                         })
                 ));
                 mediaPlayer.play();
                 mediaPlayer.close();

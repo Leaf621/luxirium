@@ -2,6 +2,7 @@ package ru.laefye.luxorium.testapp;
 
 import ru.laefye.luxorium.player.Media;
 import ru.laefye.luxorium.player.MediaPlayer;
+import ru.laefye.luxorium.player.utils.RescalerOptions;
 
 import javax.sound.sampled.*;
 import javax.swing.*;
@@ -58,7 +59,7 @@ public class MainWindow extends JFrame implements AutoCloseable {
                     System.out.println(rgbArray.length);
                     image.setRGB(0, 0, videoFrame.lineSize / 3, videoFrame.height, rgbArray, 0, videoFrame.lineSize / 3);
                     repaint();
-                }),
+                }, RescalerOptions.create().withWidth(576).withHeight(324)),
                 media.createAudioStreamPlayer(audioFrame -> {
                     line.write(audioFrame.data, 0, audioFrame.sampleSize * audioFrame.numberSamples);
                 })

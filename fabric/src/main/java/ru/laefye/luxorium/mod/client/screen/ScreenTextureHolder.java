@@ -30,11 +30,19 @@ public class ScreenTextureHolder implements AutoCloseable {
         System.out.println("Создана текстура для экрана: " + textureId + " с размерами " + width + "x" + height);
     }
 
+    private void createTexture(int width, int height, Runnable next) {
+        MinecraftClient.getInstance().execute(() -> {
+            createTexture(width, height);
+            next.run();
+        });
+    }
+
     public void setFrame(VideoFrame frame) {
         if (screenTexture == null || screenTexture.getTextureWidth() != frame.width || screenTexture.getTextureHeight() != frame.height) {
-            createTexture(frame.width, frame.height);
+            createTexture(frame.width, frame.height, () -> screenTexture.setFrame(frame, true));
+        } else {
+            screenTexture.setFrame(frame, false);
         }
-        screenTexture.setFrame(frame);   
     }
 
     public Optional<Identifier> getTextureId() {

@@ -7,6 +7,7 @@ import ru.laefye.luxorium.player.types.CycledQueue;
 import ru.laefye.luxorium.player.types.Maybe;
 import ru.laefye.luxorium.player.types.VideoFrame;
 import ru.laefye.luxorium.player.utils.Rescaler;
+import ru.laefye.luxorium.player.utils.RescalerOptions;
 
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
@@ -18,13 +19,13 @@ public class VideoStreamPlayer extends StreamPlayer {
     private final AtomicBoolean gettingFrames = new AtomicBoolean(false);
     private final Consumer<VideoFrame> onFrame;
 
-    public VideoStreamPlayer(Media media, int streamIndex, Consumer<VideoFrame> onFrame) {
+    public VideoStreamPlayer(Media media, int streamIndex, Consumer<VideoFrame> onFrame, RescalerOptions options) {
         super(media, streamIndex);
         rescaler = new Rescaler(
-            getCodecContext(),
+                getCodecContext(),
                 avutil.AV_PIX_FMT_RGB24,
-                getCodecContext().width(),
-                getCodecContext().height()
+                options.getWidth().orElse(getCodecContext().width()),
+                options.getHeight().orElse(getCodecContext().height())
         );
         queue = new CycledQueue<>(60 * 3, () -> Maybe.from(new VideoFrame()));
         this.onFrame = onFrame;

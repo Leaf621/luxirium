@@ -8,6 +8,7 @@ import com.mojang.blaze3d.systems.GpuDevice;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.textures.TextureFormat;
 
+import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.texture.AbstractTexture;
 import net.minecraft.client.texture.NativeImage;
 import ru.laefye.luxorium.player.types.VideoFrame;
@@ -21,11 +22,16 @@ public class ScreenTexture extends AbstractTexture {
         this.width = width;
         this.height = height;
         createTexture();
+        buffer = ByteBuffer.allocateDirect(width * height * 4)
+                .order(ByteOrder.nativeOrder())
+                .asIntBuffer();
     }
 
     private byte[] bytes;
 
-    public synchronized void setFrame(VideoFrame frame) {
+    private IntBuffer buffer;
+
+    public void setFrame(VideoFrame frame, boolean sync) {
         // Проверяем валидность входных данных
         if (frame == null || frame.data == null || frame.width <= 0 || frame.height <= 0) {
             System.err.println("Получен невалидный VideoFrame");
@@ -37,9 +43,6 @@ public class ScreenTexture extends AbstractTexture {
             System.err.println("Текстура не создана, не можем обновить кадр");
             return;
         }
-        
-        System.out.println("Устанавливаем кадр в текстуру, размер: " + frame.width + "x" + frame.height + 
-                          ", lineSize: " + frame.lineSize + ", data length: " + frame.data.length);
         
         // Проверяем размеры кадра
         int expectedDataSize = frame.lineSize * frame.height;
@@ -88,11 +91,8 @@ public class ScreenTexture extends AbstractTexture {
         }
 
         try {
-            // Создаем IntBuffer напрямую с правильным размером
-            IntBuffer buffer = ByteBuffer.allocateDirect(neededSize)
-                    .order(ByteOrder.nativeOrder())
-                    .asIntBuffer();
-            
+            buffer.clear();
+
             // Конвертируем RGBA байты в int значения правильно
             for (int i = 0; i < writeWidth * writeHeight; i++) {
                 int byteIndex = i * 4;
@@ -115,9 +115,6 @@ public class ScreenTexture extends AbstractTexture {
             
             buffer.flip(); // Подготавливаем для чтения
             
-            System.out.println("Записываем в текстуру: " + writeWidth + "x" + writeHeight + 
-                             " пикселей (" + neededSize + " байт), buffer size: " + buffer.remaining());
-
             // Проверяем размер буфера перед записью
             if (buffer.remaining() != writeWidth * writeHeight) {
                 System.err.println("Неправильный размер буфера: ожидается " + (writeWidth * writeHeight) + 
@@ -125,20 +122,28 @@ public class ScreenTexture extends AbstractTexture {
                 return;
             }
 
-            // Записываем данные в текстуру с дополнительными проверками
-            RenderSystem.getDevice().createCommandEncoder()
-                .writeToTexture(glTexture, buffer, NativeImage.Format.RGBA,
-                                 0, // mipLevel - уровень мипмапа (0 = базовый уровень)
-                                 0, // layer - слой текстуры (0 для обычной 2D текстуры)
-                                 0, // x - начальная позиция по X
-                                 0, // y - начальная позиция по Y
-                                 writeWidth,  // width - ширина записываемой области
-                                 writeHeight); // height - высота записываемой области
+            if (sync) {
+                updateTexture(buffer, writeWidth, writeHeight);
+            } else {
+                MinecraftClient.getInstance().execute(() -> updateTexture(buffer, writeWidth, writeHeight));
+            }
                                  
         } catch (Exception e) {
             System.err.println("Ошибка при записи кадра в текстуру: " + e.getMessage());
             e.printStackTrace();
         }
+    }
+
+    private void updateTexture(IntBuffer buffer, int writeWidth, int writeHeight)
+    {
+        RenderSystem.getDevice().createCommandEncoder()
+                .writeToTexture(glTexture, buffer, NativeImage.Format.RGBA,
+                        0, // mipLevel - уровень мипмапа (0 = базовый уровень)
+                        0, // layer - слой текстуры (0 для обычной 2D текстуры)
+                        0, // x - начальная позиция по X
+                        0, // y - начальная позиция по Y
+                        writeWidth,  // width - ширина записываемой области
+                        writeHeight); // height - высота записываемой области
     }
 
     private void createTexture() {

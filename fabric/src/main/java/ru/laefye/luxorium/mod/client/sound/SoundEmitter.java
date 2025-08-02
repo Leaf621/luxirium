@@ -8,7 +8,7 @@ import org.lwjgl.openal.AL10;
 public class SoundEmitter {
     private final int sourceId;
     private final List<Integer> activeBuffers = new ArrayList<>();
-    private static final int MAX_BUFFERS = 64; // Ограничиваем количество буферов
+    private static final int MAX_BUFFERS = 32; // Ограничиваем количество буферов
     private boolean isPlaying = false;
 
     public SoundEmitter() {
@@ -88,14 +88,22 @@ public class SoundEmitter {
         if (sourceId == 0 || pcmBytes == null || countBytes <= 0) {
             return;
         }
-        
-        // Удаляем обработанные буферы
-        removeProcessedBuffers();
-        
+
         // Проверяем, не переполнена ли очередь
         if (activeBuffers.size() >= MAX_BUFFERS) {
             System.out.println("SoundEmitter: Buffer queue full, skipping data");
             return;
+        }
+        
+        // Диагностика входящих данных
+        float durationMs = (countBytes / 2.0f) / sampleRate * 1000; // для 16-bit mono
+        System.out.println("SoundEmitter: Receiving " + countBytes + " bytes, sampleRate=" + sampleRate + 
+                          ", estimated duration=" + String.format("%.2f", durationMs) + "ms");
+        
+        // Проверяем минимальный размер буфера (хотя бы 10ms звука)
+        int minBytes = sampleRate * 2 / 100; // 10ms для 16-bit mono
+        if (countBytes < minBytes) {
+            System.out.println("SoundEmitter: Warning - buffer too small (" + countBytes + " bytes < " + minBytes + " bytes for 10ms)");
         }
         
         try {
@@ -124,6 +132,12 @@ public class SoundEmitter {
                 AL10.alDeleteBuffers(bufferId);
                 return;
             }
+            
+            // Проверяем, что буфер действительно содержит данные
+            int bufferSize = AL10.alGetBufferi(bufferId, AL10.AL_SIZE);
+            int bufferFreq = AL10.alGetBufferi(bufferId, AL10.AL_FREQUENCY);
+            System.out.println("SoundEmitter: Buffer " + bufferId + " created: size=" + bufferSize + 
+                              " bytes, freq=" + bufferFreq + "Hz");
             
             // Добавляем буфер в очередь
             AL10.alSourceQueueBuffers(sourceId, bufferId);
