@@ -17,4 +17,13 @@ public class VideoFrame {
         this.duration = 0.0;
         this.timestamp = 0.0;
     }
+
+    public VideoFrame(int lineSize, int height, int width, byte[] data, double duration, double timestamp) {
+        this.lineSize = lineSize;
+        this.height = height;
+        this.width = width;
+        this.data = data;
+        this.duration = duration;
+        this.timestamp = timestamp;
+    }
 }

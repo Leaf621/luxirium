@@ -20,6 +20,7 @@ public class MediaPlayer implements AutoCloseable {
     private CountDownLatch readLatch = new CountDownLatch(0);
     private boolean stopped = true;
     private Thread readThread = null;
+    private boolean highPerformanceMode = true; // Включен по умолчанию для OpenAL
 
     public MediaPlayer(Media media, List<StreamPlayer> streamPlayers) {
         this.media = media;
@@ -27,29 +28,47 @@ public class MediaPlayer implements AutoCloseable {
         this.frame = avutil.av_frame_alloc();
         this.streamPlayers = streamPlayers;
     }
+    
+    public void setHighPerformanceMode(boolean enabled) {
+        this.highPerformanceMode = enabled;
+    }
 
     private boolean getNextFrame() {
-        while (true) {
-            for (var streamPlayer : streamPlayers) {
-                if (avcodec.avcodec_receive_frame(streamPlayer.getCodecContext(), frame) >= 0) {
-                    streamPlayer.processFrame(frame);
-                    return true;
-                }
+        // Сначала пытаемся получить готовые кадры из декодеров
+        for (var streamPlayer : streamPlayers) {
+            if (avcodec.avcodec_receive_frame(streamPlayer.getCodecContext(), frame) >= 0) {
+                streamPlayer.processFrame(frame);
+                return true;
             }
+        }
 
+        // Читаем новые пакеты и отправляем в декодеры
+        while (true) {
             if (avformat.av_read_frame(media.getContext(), packet) < 0) {
                 return false;
             }
 
-            var optionalStreamPlayer = streamPlayers.stream()
-                    .filter(streamPlayer -> streamPlayer.streamIndex == packet.stream_index())
-                    .findFirst();
+            // Оптимизированный поиск stream player'а
+            StreamPlayer targetPlayer = null;
+            for (var streamPlayer : streamPlayers) {
+                if (streamPlayer.streamIndex == packet.stream_index()) {
+                    targetPlayer = streamPlayer;
+                    break;
+                }
+            }
 
-            optionalStreamPlayer.ifPresent(streamPlayer -> {
-                avcodec.avcodec_send_packet(streamPlayer.getCodecContext(), packet);
-            });
-
-            avcodec.av_packet_unref(packet);
+            if (targetPlayer != null) {
+                avcodec.avcodec_send_packet(targetPlayer.getCodecContext(), packet);
+                avcodec.av_packet_unref(packet);
+                
+                // Сразу пытаемся получить кадр после отправки пакета
+                if (avcodec.avcodec_receive_frame(targetPlayer.getCodecContext(), frame) >= 0) {
+                    targetPlayer.processFrame(frame);
+                    return true;
+                }
+            } else {
+                avcodec.av_packet_unref(packet);
+            }
         }
     }
 
@@ -60,7 +79,9 @@ public class MediaPlayer implements AutoCloseable {
         while (!eof && !stopped) {
             try {
                 readLatch.await();
-                for (int i = 0; i < 64; i++) {
+                // Динамически адаптируем размер батча для максимальной производительности
+                int batchSize = highPerformanceMode ? 256 : 128;
+                for (int i = 0; i < batchSize; i++) {
                     if (!getNextFrame()) {
                         eof = true;
                         break;
@@ -68,7 +89,8 @@ public class MediaPlayer implements AutoCloseable {
                 }
                 readLatch = new CountDownLatch(1);
             } catch (InterruptedException e) {
-                throw new RuntimeException(e);
+                Thread.currentThread().interrupt();
+                break;
             }
         }
     }
@@ -88,12 +110,13 @@ public class MediaPlayer implements AutoCloseable {
             }
             stopped = false;
             readThread = new Thread(this::runRead, "MediaPlayer-ReadThread");
+            
             readThread.start();
             readThread.join();
             stopped = true;
             streamPlayers.forEach(StreamPlayer::waitForEnd);
         } catch (InterruptedException e) {
-            throw new RuntimeException(e);
+            Thread.currentThread().interrupt();
         }
     }
 

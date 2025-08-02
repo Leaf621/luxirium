@@ -56,7 +56,6 @@ public class MainWindow extends JFrame implements AutoCloseable {
                         int b = videoFrame.data[i * 3 + 2] & 0xFF;
                         rgbArray[i] = (r << 16) | (g << 8) | b;
                     }
-                    System.out.println(rgbArray.length);
                     image.setRGB(0, 0, videoFrame.lineSize / 3, videoFrame.height, rgbArray, 0, videoFrame.lineSize / 3);
                     repaint();
                 }, RescalerOptions.create().withWidth(576).withHeight(324)),

@@ -10,4 +10,11 @@ public class Maybe<T> {
         maybe.value = value;
         return maybe;
     }
+
+    public static <T> Maybe<T> from(T value, boolean isPresent) {
+        Maybe<T> maybe = new Maybe<>();
+        maybe.isPresent = isPresent;
+        maybe.value = value;
+        return maybe;
+    }
 }

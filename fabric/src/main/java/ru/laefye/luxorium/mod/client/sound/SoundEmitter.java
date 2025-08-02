@@ -63,8 +63,6 @@ public class SoundEmitter {
                     activeBuffers.remove(Integer.valueOf(buffer));
                 }
             }
-            
-            System.out.println("SoundEmitter: Removed " + processed + " processed buffers. Active: " + activeBuffers.size());
         }
         
         // Проверяем, не закончилось ли воспроизведение
@@ -89,16 +87,15 @@ public class SoundEmitter {
             return;
         }
 
+        if (activeBuffers.size() == 0) {
+            System.out.println("SoundEmitter: No active buffers");
+        }
+
         // Проверяем, не переполнена ли очередь
         if (activeBuffers.size() >= MAX_BUFFERS) {
             System.out.println("SoundEmitter: Buffer queue full, skipping data");
             return;
         }
-        
-        // Диагностика входящих данных
-        float durationMs = (countBytes / 2.0f) / sampleRate * 1000; // для 16-bit mono
-        System.out.println("SoundEmitter: Receiving " + countBytes + " bytes, sampleRate=" + sampleRate + 
-                          ", estimated duration=" + String.format("%.2f", durationMs) + "ms");
         
         // Проверяем минимальный размер буфера (хотя бы 10ms звука)
         int minBytes = sampleRate * 2 / 100; // 10ms для 16-bit mono
@@ -133,17 +130,9 @@ public class SoundEmitter {
                 return;
             }
             
-            // Проверяем, что буфер действительно содержит данные
-            int bufferSize = AL10.alGetBufferi(bufferId, AL10.AL_SIZE);
-            int bufferFreq = AL10.alGetBufferi(bufferId, AL10.AL_FREQUENCY);
-            System.out.println("SoundEmitter: Buffer " + bufferId + " created: size=" + bufferSize + 
-                              " bytes, freq=" + bufferFreq + "Hz");
-            
             // Добавляем буфер в очередь
             AL10.alSourceQueueBuffers(sourceId, bufferId);
             activeBuffers.add(bufferId);
-            
-            System.out.println("SoundEmitter: Queued buffer " + bufferId + " with " + countBytes + " bytes. Queue size: " + activeBuffers.size());
             
             // Автоматически запускаем воспроизведение
             if (!isPlaying && activeBuffers.size() >= 2) {

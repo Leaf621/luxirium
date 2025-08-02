@@ -2,21 +2,20 @@ package ru.laefye.luxorium.player;
 
 import org.bytedeco.ffmpeg.avutil.AVFrame;
 import org.bytedeco.ffmpeg.global.avutil;
+
 import ru.laefye.luxorium.player.interfaces.MediaHelper;
-import ru.laefye.luxorium.player.types.CycledQueue;
+import ru.laefye.luxorium.player.types.FastCycledQueue;
 import ru.laefye.luxorium.player.types.Maybe;
 import ru.laefye.luxorium.player.types.VideoFrame;
 import ru.laefye.luxorium.player.utils.Rescaler;
 import ru.laefye.luxorium.player.utils.RescalerOptions;
 
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
 public class VideoStreamPlayer extends StreamPlayer {
     private Thread playThread = null;
     private final Rescaler rescaler;
-    private final CycledQueue<Maybe<VideoFrame>> queue;
-    private final AtomicBoolean gettingFrames = new AtomicBoolean(false);
+    private final FastCycledQueue<Maybe<VideoFrame>> queue;
     private final Consumer<VideoFrame> onFrame;
 
     public VideoStreamPlayer(Media media, int streamIndex, Consumer<VideoFrame> onFrame, RescalerOptions options) {
@@ -27,36 +26,40 @@ public class VideoStreamPlayer extends StreamPlayer {
                 options.getWidth().orElse(getCodecContext().width()),
                 options.getHeight().orElse(getCodecContext().height())
         );
-        queue = new CycledQueue<>(60 * 3, () -> Maybe.from(new VideoFrame()));
+        // Увеличиваем буфер и используем быструю очередь
+        queue = new FastCycledQueue<>(128, () -> Maybe.from(new VideoFrame()));
         this.onFrame = onFrame;
     }
 
     @Override
     void processFrame(AVFrame frame) {
-        gettingFrames.set(true);
         if (frame.height() == 0 || frame.linesize(0) == 0) {
             return;
         }
+
+        // Быстрое масштабирование и конвертация
         var duration = frame.duration() * avutil.av_q2d(stream().time_base());
         var timestamp = frame.pts() * avutil.av_q2d(stream().time_base());
         var rescaledFrame = rescaler.rescale(frame);
-        try {
-            queue.offer(videoFrameMaybe -> {
-                var frameSize = rescaledFrame.linesize(0) * rescaledFrame.height();
-                videoFrameMaybe.isPresent = true;
-                videoFrameMaybe.value.duration = duration;
-                videoFrameMaybe.value.lineSize = rescaledFrame.linesize(0);
-                videoFrameMaybe.value.height = rescaledFrame.height();
-                videoFrameMaybe.value.width = rescaledFrame.width();
-                videoFrameMaybe.value.timestamp = timestamp;
-                if (videoFrameMaybe.value.data.length < frameSize) {
-                    videoFrameMaybe.value.data = new byte[frameSize];
-                }
-                rescaledFrame.data(0).get(videoFrameMaybe.value.data, 0, frameSize);
-            });
-        } catch (InterruptedException e) {
-            throw new RuntimeException(e);
-        }
+        
+        var frameSize = rescaledFrame.linesize(0) * rescaledFrame.height();
+        
+        // Неблокирующая запись в очередь
+        queue.offer(videoFrameMaybe -> {
+            videoFrameMaybe.isPresent = true;
+            var videoFrame = videoFrameMaybe.value;
+            videoFrame.duration = duration;
+            videoFrame.lineSize = rescaledFrame.linesize(0);
+            videoFrame.height = rescaledFrame.height();
+            videoFrame.width = rescaledFrame.width();
+            videoFrame.timestamp = timestamp;
+            
+            // Избегаем лишних аллокаций
+            if (videoFrame.data.length < frameSize) {
+                videoFrame.data = new byte[Math.max(frameSize, videoFrame.data.length * 2)];
+            }
+            rescaledFrame.data(0).get(videoFrame.data, 0, frameSize);
+        });
     }
 
     private void play(MediaHelper mediaHelper) {
@@ -66,19 +69,23 @@ public class VideoStreamPlayer extends StreamPlayer {
                 var begin = System.currentTimeMillis();
                 var frame = queue.take();
                 if (!frame.isPresent) break;
-                if (queue.getCount() < 3 && gettingFrames.get()) {
-                    gettingFrames.set(true);
+                
+                // Проверяем уровень очереди и запрашиваем новые кадры
+                if (queue.getCount() < 5) {
                     mediaHelper.getNextFrames();
                 }
+                
                 var videoFrame = frame.value;
                 onFrame.accept(videoFrame);
+                
+                // Рассчитываем задержку для поддержания FPS
                 var delay = (long) (videoFrame.duration * 1000) - (System.currentTimeMillis() - begin);
                 if (delay > 0) {
                     Thread.sleep(delay);
                 }
             }
         } catch (InterruptedException e) {
-            throw new RuntimeException(e);
+            Thread.currentThread().interrupt();
         }
     }
 
@@ -90,34 +97,29 @@ public class VideoStreamPlayer extends StreamPlayer {
 
     @Override
     public void stop() {
-        try {
-            flush();
-            queue.offer(videoFrameMaybe -> {
-                videoFrameMaybe.isPresent = false;
-            });
-        } catch (InterruptedException e) {
-            throw new RuntimeException(e);
-        }
+        flush();
+        queue.offer(videoFrameMaybe -> {
+            videoFrameMaybe.isPresent = false;
+        });
     }
 
     @Override
     public void flush() {
         queue.clear();
-        gettingFrames.set(false);
     }
 
     @Override
     public void waitForEnd() {
-        try {
-            if (playThread != null) {
-                queue.offer(videoFrameMaybe -> {
-                    videoFrameMaybe.isPresent = false;
-                });
+        if (playThread != null) {
+            queue.offer(videoFrameMaybe -> {
+                videoFrameMaybe.isPresent = false;
+            });
+            try {
                 playThread.join();
                 playThread = null;
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
             }
-        } catch (InterruptedException e) {
-            throw new RuntimeException(e);
         }
     }
 

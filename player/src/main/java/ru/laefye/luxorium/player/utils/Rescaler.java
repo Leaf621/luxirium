@@ -47,11 +47,23 @@ public class Rescaler implements AutoCloseable {
     }
 
     public AVFrame rescale(AVFrame inputFrame) {
+        // Быстрая проверка без вывода в консоль для производительности
         if (inputFrame.width() != context.width() || inputFrame.height() != context.height()) {
             throw new NativeException("Input frame dimensions do not match codec context dimensions");
         }
 
-        // Rescale the input frame to the target dimensions and pixel format
+        // Переиспользуем rescaledFrame без реаллокации, если размеры совпадают
+        if (rescaledFrame.width() != targetWidth || rescaledFrame.height() != targetHeight) {
+            avutil.av_frame_unref(rescaledFrame);
+            rescaledFrame.format(targetPixelFormat);
+            rescaledFrame.width(targetWidth);
+            rescaledFrame.height(targetHeight);
+            if (avutil.av_frame_get_buffer(rescaledFrame, 0) < 0) {
+                throw new NativeException("Could not allocate buffer for rescaled AVFrame");
+            }
+        }
+
+        // Масштабирование
         swscale.sws_scale(swsContext, inputFrame.data(), inputFrame.linesize(),
                 0, inputFrame.height(), rescaledFrame.data(), rescaledFrame.linesize());
 

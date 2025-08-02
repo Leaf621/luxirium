@@ -34,14 +34,11 @@ public class LuxoriumClient implements ClientModInitializer {
                 // Получаем sample rate один раз и сохраняем
                 final int sampleRate = media.getSampleRate();
                 Logger.getLogger("LuxoriumClient").info("Sample rate: " + sampleRate);
-                AtomicLong d = new AtomicLong(System.currentTimeMillis());
                 MediaPlayer mediaPlayer = new MediaPlayer(media, List.of(
-                        media.createVideoStreamPlayer(videoFrame -> {
-                            getCinemaScreen().getTextureHolder().setFrame(videoFrame);
-                        }, RescalerOptions.create().withWidth(1280).withHeight(720)),
                          media.createAudioStreamPlayer(t -> {
                              while (source.isQueueFull()) {
                                     try {
+                                        System.out.println("SoundEmitter: Buffer full, waiting...");
                                         Thread.sleep((long)(t.duration * 1000));
                                     } catch (InterruptedException e) {
                                         e.printStackTrace();
@@ -49,7 +46,12 @@ public class LuxoriumClient implements ClientModInitializer {
                              }
                              source.write(t.data, t.sampleSize * t.numberSamples, t.sampleRate);
                          })
+                        ,
+                        media.createVideoStreamPlayer(videoFrame -> {
+                            getCinemaScreen().getTextureHolder().setFrame(videoFrame);
+                        }, RescalerOptions.create().withWidth(1280).withHeight(720))
                 ));
+                mediaPlayer.setHighPerformanceMode(true);
                 mediaPlayer.play();
                 mediaPlayer.close();
                 source.play(); 

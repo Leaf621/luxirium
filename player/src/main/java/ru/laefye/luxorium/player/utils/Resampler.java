@@ -57,15 +57,21 @@ public class Resampler implements AutoCloseable {
             throw new NativeException("Could not get output samples count for resampling");
         }
 
-        avutil.av_frame_unref(resampledFrame);
+        // Переиспользуем фрейм, только если нужно изменить размер
+        if (resampledFrame.nb_samples() != outSamples || 
+            resampledFrame.format() != targetSampleFormat ||
+            avutil.av_channel_layout_compare(resampledFrame.ch_layout(), targetChannelLayout) != 0) {
+            
+            avutil.av_frame_unref(resampledFrame);
+            
+            resampledFrame.nb_samples(outSamples);
+            resampledFrame.format(targetSampleFormat);
+            resampledFrame.ch_layout(targetChannelLayout);
+            resampledFrame.sample_rate(codecContext.sample_rate());
 
-        resampledFrame.nb_samples(outSamples);
-        resampledFrame.format(targetSampleFormat);
-        resampledFrame.ch_layout(targetChannelLayout);
-        resampledFrame.sample_rate(codecContext.sample_rate());
-
-        if (avutil.av_frame_get_buffer(resampledFrame, 0) < 0) {
-            throw new NativeException("Could not allocate buffer for resampled AVFrame");
+            if (avutil.av_frame_get_buffer(resampledFrame, 0) < 0) {
+                throw new NativeException("Could not allocate buffer for resampled AVFrame");
+            }
         }
 
         var convertedSamples = swresample.swr_convert(
@@ -77,10 +83,11 @@ public class Resampler implements AutoCloseable {
         );
 
         if (convertedSamples <= 0) {
-            avutil.av_frame_unref(resampledFrame);
             throw new NativeException("Could not convert samples for resampling");
         }
 
+        // Обновляем количество сэмплов на фактически конвертированное
+        resampledFrame.nb_samples(convertedSamples);
         return resampledFrame;
     }
 

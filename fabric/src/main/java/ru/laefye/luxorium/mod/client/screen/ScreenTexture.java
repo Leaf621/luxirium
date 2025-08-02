@@ -22,9 +22,14 @@ public class ScreenTexture extends AbstractTexture {
         this.width = width;
         this.height = height;
         createTexture();
-        buffer = ByteBuffer.allocateDirect(width * height * 4)
+        
+        // Создаем буфер с правильным размером (4 байта на пиксель для RGBA)
+        int bufferSize = width * height * 4;
+        buffer = ByteBuffer.allocateDirect(bufferSize)
                 .order(ByteOrder.nativeOrder())
                 .asIntBuffer();
+                
+        System.out.println("Создан буфер размером " + bufferSize + " байт для текстуры " + width + "x" + height);
     }
 
     private byte[] bytes;
@@ -41,6 +46,12 @@ public class ScreenTexture extends AbstractTexture {
         // Проверяем, что текстура создана
         if (glTexture == null) {
             System.err.println("Текстура не создана, не можем обновить кадр");
+            return;
+        }
+        
+        // Проверяем, что буфер инициализирован
+        if (buffer == null) {
+            System.err.println("Буфер не инициализирован");
             return;
         }
         
@@ -64,10 +75,17 @@ public class ScreenTexture extends AbstractTexture {
         int writeWidth = Math.min(frame.width, width);
         int writeHeight = Math.min(frame.height, height);
         
+        // Логируем информацию о кадре только для отладки проблем с размерами
+        if (frame.width != writeWidth || frame.height != writeHeight) {
+            System.out.println("Масштабируем кадр: " + frame.width + "x" + frame.height + 
+                             " -> " + writeWidth + "x" + writeHeight);
+        }
+        
         // Подготавливаем буфер для записи в текстуру
         int neededSize = writeWidth * writeHeight * 4; // 4 байта на пиксель (RGBA)
         if (bytes == null || bytes.length < neededSize) {
             bytes = new byte[neededSize];
+            System.out.println("Пересоздали байтовый буфер размером " + neededSize + " байт");
         }
         
         // Копируем данные из кадра в буфер, учитывая lineSize
@@ -92,6 +110,19 @@ public class ScreenTexture extends AbstractTexture {
 
         try {
             buffer.clear();
+            
+            // Проверяем, что буфер достаточно большой для записи
+            int requiredCapacity = writeWidth * writeHeight;
+            if (buffer.capacity() < requiredCapacity) {
+                System.err.println("Буфер слишком мал: нужно " + requiredCapacity + 
+                                 ", доступно " + buffer.capacity());
+                // Пересоздаем буфер с нужным размером
+                int newBufferSize = Math.max(requiredCapacity, width * height) * 4;
+                buffer = ByteBuffer.allocateDirect(newBufferSize)
+                        .order(ByteOrder.nativeOrder())
+                        .asIntBuffer();
+                System.out.println("Пересоздали IntBuffer размером " + buffer.capacity() + " элементов");
+            }
 
             // Конвертируем RGBA байты в int значения правильно
             for (int i = 0; i < writeWidth * writeHeight; i++) {
@@ -116,9 +147,26 @@ public class ScreenTexture extends AbstractTexture {
             buffer.flip(); // Подготавливаем для чтения
             
             // Проверяем размер буфера перед записью
-            if (buffer.remaining() != writeWidth * writeHeight) {
-                System.err.println("Неправильный размер буфера: ожидается " + (writeWidth * writeHeight) + 
-                                 ", получено " + buffer.remaining());
+            int expectedPixels = writeWidth * writeHeight;
+            int actualPixels = buffer.remaining();
+            if (actualPixels != expectedPixels) {
+                System.err.println("Неправильный размер буфера: ожидается " + expectedPixels + 
+                                 ", получено " + actualPixels);
+                return;
+            }
+            
+            // Дополнительная проверка: убеждаемся, что размеры не превышают размеры текстуры
+            if (writeWidth > width || writeHeight > height) {
+                System.err.println("Размеры записи превышают размеры текстуры: " + 
+                                 writeWidth + "x" + writeHeight + " > " + width + "x" + height);
+                return;
+            }
+            
+            // Проверяем, что буфер имеет достаточно данных в байтах
+            int requiredBytes = expectedPixels * 4; // 4 байта на пиксель для RGBA
+            if (buffer.capacity() * 4 < requiredBytes) {
+                System.err.println("Недостаточно данных в буфере: нужно " + requiredBytes + 
+                                 " байт, доступно " + (buffer.capacity() * 4));
                 return;
             }
 
@@ -136,14 +184,48 @@ public class ScreenTexture extends AbstractTexture {
 
     private void updateTexture(IntBuffer buffer, int writeWidth, int writeHeight)
     {
-        RenderSystem.getDevice().createCommandEncoder()
-                .writeToTexture(glTexture, buffer, NativeImage.Format.RGBA,
-                        0, // mipLevel - уровень мипмапа (0 = базовый уровень)
-                        0, // layer - слой текстуры (0 для обычной 2D текстуры)
-                        0, // x - начальная позиция по X
-                        0, // y - начальная позиция по Y
-                        writeWidth,  // width - ширина записываемой области
-                        writeHeight); // height - высота записываемой области
+        try {
+            // Дополнительные проверки перед записью
+            if (glTexture == null) {
+                System.err.println("glTexture равен null, не можем обновить текстуру");
+                return;
+            }
+            
+            if (buffer == null || buffer.remaining() == 0) {
+                System.err.println("Буфер пуст или равен null");
+                return;
+            }
+            
+            int expectedPixels = writeWidth * writeHeight;
+            int actualPixels = buffer.remaining();
+            
+            if (actualPixels != expectedPixels) {
+                System.err.println("Несоответствие размеров: ожидается " + expectedPixels + 
+                                 " пикселей, в буфере " + actualPixels);
+                return;
+            }
+            
+            // Логируем информацию о записи только если есть проблемы
+            if (actualPixels != expectedPixels) {
+                System.out.println("Записываем в текстуру: " + writeWidth + "x" + writeHeight + 
+                                 " пикселей, буфер содержит " + actualPixels + " пикселей");
+            }
+            
+            RenderSystem.getDevice().createCommandEncoder()
+                    .writeToTexture(glTexture, buffer, NativeImage.Format.RGBA,
+                            0, // mipLevel - уровень мипмапа (0 = базовый уровень)
+                            0, // layer - слой текстуры (0 для обычной 2D текстуры)
+                            0, // x - начальная позиция по X
+                            0, // y - начальная позиция по Y
+                            writeWidth,  // width - ширина записываемой области
+                            writeHeight); // height - высота записываемой области
+                            
+        } catch (Exception e) {
+            System.err.println("Ошибка при записи в текстуру: " + e.getMessage());
+            System.err.println("Параметры: writeWidth=" + writeWidth + ", writeHeight=" + writeHeight + 
+                             ", buffer.remaining()=" + (buffer != null ? buffer.remaining() : "null"));
+            e.printStackTrace();
+        }
     }
 
     private void createTexture() {

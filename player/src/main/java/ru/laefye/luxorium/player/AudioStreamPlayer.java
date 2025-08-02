@@ -4,52 +4,56 @@ import org.bytedeco.ffmpeg.avutil.AVFrame;
 import org.bytedeco.ffmpeg.global.avutil;
 import ru.laefye.luxorium.player.interfaces.MediaHelper;
 import ru.laefye.luxorium.player.types.AudioFrame;
-import ru.laefye.luxorium.player.types.CycledQueue;
+import ru.laefye.luxorium.player.types.FastCycledQueue;
 import ru.laefye.luxorium.player.types.Maybe;
 import ru.laefye.luxorium.player.utils.Resampler;
 
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
 public class AudioStreamPlayer extends StreamPlayer {
     private final Consumer<AudioFrame> onFrame;
     private final Resampler resampler;
-    private final CycledQueue<Maybe<AudioFrame>> queue;
-    private final AtomicBoolean gettingFrames = new AtomicBoolean(false);
+    private final FastCycledQueue<Maybe<AudioFrame>> queue;
     private Thread playThread = null;
 
     public AudioStreamPlayer(Media media, int streamIndex, Consumer<AudioFrame> onFrame) {
         super(media, streamIndex);
         this.onFrame = onFrame;
         this.resampler = new Resampler(getCodecContext());
-        this.queue = new CycledQueue<>(60 * 3, () -> Maybe.from(new AudioFrame()));
+        // Увеличиваем размер буфера для OpenAL - больше данных в буфере = меньше underrun'ов
+        this.queue = new FastCycledQueue<>(256, () -> Maybe.from(new AudioFrame()));
     }
 
     @Override
     void processFrame(AVFrame frame) {
-        gettingFrames.set(true);
         var resampledFrame = resampler.resample(frame);
-        try {
-            var numberSamples = resampledFrame.nb_samples();
-            var sampleSize = avutil.av_get_bytes_per_sample(resampler.getTargetSampleFormat());
-            var timestamp = frame.pts() * avutil.av_q2d(stream().time_base());
-            var frameRate = resampledFrame.sample_rate();
-            var duration = frame.duration() * avutil.av_q2d(stream().time_base());
+        var numberSamples = resampledFrame.nb_samples();
+        var sampleSize = avutil.av_get_bytes_per_sample(resampler.getTargetSampleFormat());
+        var timestamp = frame.pts() * avutil.av_q2d(stream().time_base());
+        var frameRate = resampledFrame.sample_rate();
+        var duration = frame.duration() * avutil.av_q2d(stream().time_base());
+        var dataSize = numberSamples * sampleSize;
 
-            queue.offer(audioFrameMaybe -> {
-                audioFrameMaybe.isPresent = true;
-                audioFrameMaybe.value.numberSamples = numberSamples;
-                audioFrameMaybe.value.sampleSize = sampleSize;
-                audioFrameMaybe.value.timestamp = timestamp;
-                audioFrameMaybe.value.sampleRate = frameRate;
-                audioFrameMaybe.value.duration = duration;
-                if (audioFrameMaybe.value.data.length < numberSamples * sampleSize) {
-                    audioFrameMaybe.value.data = new byte[numberSamples * sampleSize];
-                }
-                resampledFrame.data(0).get(audioFrameMaybe.value.data, 0, numberSamples * sampleSize);
-            });
-        } catch (InterruptedException e) {
-            throw new RuntimeException(e);
+        // Быстрая неблокирующая запись в очередь
+        boolean success = queue.offer(audioFrameMaybe -> {
+            audioFrameMaybe.isPresent = true;
+            var audioFrame = audioFrameMaybe.value;
+            audioFrame.numberSamples = numberSamples;
+            audioFrame.sampleSize = sampleSize;
+            audioFrame.timestamp = timestamp;
+            audioFrame.sampleRate = frameRate;
+            audioFrame.duration = duration;
+            
+            // Избегаем лишних аллокаций
+            if (audioFrame.data.length < dataSize) {
+                audioFrame.data = new byte[Math.max(dataSize, audioFrame.data.length * 2)];
+            }
+            resampledFrame.data(0).get(audioFrame.data, 0, dataSize);
+        });
+
+        // Если очередь заполнена, пропускаем кадр (лучше чем блокировка)
+        if (!success) {
+            System.err.println("Audio queue overflow - dropping frame");
         }
     }
 
@@ -57,18 +61,19 @@ public class AudioStreamPlayer extends StreamPlayer {
         try {
             flush();
             while (true) {
-                var begin = System.currentTimeMillis();
                 var frame = queue.take();
                 if (!frame.isPresent) break;
-                if (queue.getCount() < 5 && gettingFrames.get()) {
-                    gettingFrames.set(true);
+                
+                // Проверяем уровень очереди и запрашиваем новые кадры
+                if (queue.getCount() < 10) {
                     mediaHelper.getNextFrames();
                 }
+                
                 var audioFrame = frame.value;
                 onFrame.accept(audioFrame);
             }
         } catch (InterruptedException e) {
-            throw new RuntimeException(e);
+            Thread.currentThread().interrupt();
         }
     }
 
@@ -87,32 +92,27 @@ public class AudioStreamPlayer extends StreamPlayer {
     @Override
     public void stop() {
         flush();
-        try {
-            queue.offer(audioFrameMaybe -> {
-                audioFrameMaybe.isPresent = false;
-            });
-        } catch (InterruptedException e) {
-            throw new RuntimeException(e);
-        }
+        queue.offer(audioFrameMaybe -> {
+            audioFrameMaybe.isPresent = false;
+        });
     }
 
     @Override
     public void flush() {
         queue.clear();
-        gettingFrames.set(false);
     }
 
     @Override
     public void waitForEnd() {
         if (playThread != null) {
+            queue.offer(audioFrameMaybe -> {
+                audioFrameMaybe.isPresent = false;
+            });
             try {
-                queue.offer(audioFrameMaybe -> {
-                    audioFrameMaybe.isPresent = false;
-                });
                 playThread.join();
                 playThread = null;
             } catch (InterruptedException e) {
-                throw new RuntimeException(e);
+                Thread.currentThread().interrupt();
             }
         }
     }
